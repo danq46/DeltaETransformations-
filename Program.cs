@@ -9,6 +9,7 @@ using System.Net.Http.Headers;
 using System.Runtime.InteropServices.ComTypes;
 using System.Text.RegularExpressions;
 using System.Xml;
+using System.Diagnostics;
 
 namespace Hyperboliq
 {
@@ -165,8 +166,6 @@ namespace Hyperboliq
             //setting an array to the amount of peices desired
             Image[] imgarray = new Image[400];
 
-            Console.WriteLine($"Seprating {_fileNames.First()} in 400 parts");
-
             //looping through height and width to achieve the desired amount of pieces 20x20
             for (var x = 0; x <= 20; x++)
             {
@@ -205,24 +204,32 @@ namespace Hyperboliq
                 height += img.Height;
             }
 
-            var count = 0;
-            var bitMap = new Bitmap(width, height);
-            var graphics1 = Graphics.FromImage(bitMap);
-            foreach (var img in imgarray)
+            var bitMap = new Bitmap(image.Width, image.Height, new Bitmap(image).PixelFormat);
+            using (var graphics1 = Graphics.FromImage(bitMap))
             {
-                if (count == 0)
+                var counter = 1;
+                foreach (var img in imgarray)
                 {
-                    graphics1.DrawImage(img, new Point(0, 0));
-                    width = img.Width;
+                    graphics1.DrawImage(image, 0, 0);
+                    
+                    Console.SetCursorPosition(0, Console.CursorTop);
+                    Console.Write($"Drawing part({counter}) of {imgarray.Length}");
+
+                    counter++;
                 }
-                else
-                {
-                    graphics1.DrawImage(img, new Point(width, 0));
-                    width += img.Width;
-                }
-                count++;
             }
             bitMap.Save(_outImagePath, System.Drawing.Imaging.ImageFormat.Jpeg);
+
+            Console.WriteLine($"File located in : {_outImagePath}");
+            
+            try
+            {
+                // opens the folder in explorer
+                Process.Start("explorer.exe", _outImagePath);
+            }
+            catch { 
+            
+            }
         }
     }
 }
