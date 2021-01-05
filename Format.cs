@@ -1,8 +1,12 @@
-﻿using System;
+﻿using Microsoft.VisualBasic;
+using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Drawing;
+using System.Drawing.Imaging;
+using System.Reflection;
 using System.Text;
+using System.Threading.Tasks;
 
 namespace Hyperboliq
 {
@@ -18,21 +22,38 @@ namespace Hyperboliq
 
         public AverageRGB(Image image) 
         {
-            var bitMap = new Bitmap(image);
-
             Double R = 0, G = 0, B = 0, total = 0;
 
-            for (var x = 0; x < bitMap.Width; x++)
+            var bitMap = new Bitmap(image);
+
+            Int32 width = bitMap.Width,
+                height = bitMap.Height;
+
+            var bitMapData = bitMap.LockBits(new Rectangle(0, 0, width, height), ImageLockMode.ReadOnly,bitMap.PixelFormat);
+            
+            //stride is the width of a single row of pixels (a scan line), rounded up to a four-byte boundary.
+            var stride = Math.Abs(bitMapData.Stride);
+
+            unsafe
             {
-                for (var y = 0; y < bitMap.Height; y++)
-                {
-                    var pixelColor = bitMap.GetPixel(x, y);
-                    R += pixelColor.R;
-                    G += pixelColor.G;
-                    B += pixelColor.B;
-                    total++;
-                }
+                //first pixel data 
+                byte* pointer = (byte*)bitMapData.Scan0;
+
+                Parallel.For(0, width, x => {
+                    byte* pointerLine = pointer + x * stride;
+                    
+                    //get RGB data for each pixel
+                    for (var y = 0; y < height; y++)
+                    {
+                        R += pointerLine[2];
+                        G += pointerLine[1];
+                        B += pointerLine[0];
+                        total++;
+                    }
+                    pointerLine += 3;
+                });
             }
+            bitMap.UnlockBits(bitMapData);
 
             _avgR = R / total;
             _avgG = G / total;

@@ -7,9 +7,8 @@ namespace Hyperboliq
 {
     struct IlluminantReference
     {
-        #region
-        /*
-        http://www.easyrgb.com/en/math.php#text3 - YZ (Tristimulus) Reference values of a perfect reflecting diffuser
+        #region http://www.easyrgb.com/en/math.php#text3
+        /* YZ (Tristimulus) Reference values of a perfect reflecting diffuser
 
         Illuminant	X2	Y2	Z2	X10	Y10	Z10	 
         A	109.850	100.000	35.585	111.144	100.000	35.200	Incandescent/tungsten
@@ -102,9 +101,11 @@ namespace Hyperboliq
         public Double RefY { get { return _refY; } }
         public Double RefZ { get { return _refZ; } }
 
-        public IlluminantItem(Illuminant illuminant)
+        public IlluminantItem(Illuminant illuminant, String Observer)
         {
-
+            _refX = Observer.Equals("0") ? illuminant.x2 : illuminant.x10;
+            _refY = Observer.Equals("0") ? illuminant.y2 : illuminant.y10;
+            _refZ = Observer.Equals("0") ? illuminant.z2 : illuminant.z10;
         }
     }
 }
