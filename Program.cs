@@ -1,15 +1,10 @@
-﻿using System;
+﻿using Microsoft.VisualBasic.CompilerServices;
+using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Drawing;
-using System.Drawing.Drawing2D;
-using System.Drawing.Imaging;
 using System.IO;
 using System.Linq;
-using System.Net.Http.Headers;
-using System.Runtime.InteropServices.ComTypes;
-using System.Text.RegularExpressions;
-using System.Xml;
-using System.Diagnostics;
 using System.Threading.Tasks;
 
 namespace Hyperboliq
@@ -21,7 +16,8 @@ namespace Hyperboliq
         private static List<Image> _tileImages = new List<Image>();
         private static List<String> _fileNames = new List<String>();
 
-        private readonly static String _outImagePath = $"{Path.GetTempPath()}HyperBoliq\\ImageOutput.jpeg";
+        private readonly static String _outImageFolderPath = $"{Path.GetTempPath()}HyperBoliq",
+            _outImagePath = $"{Path.GetTempPath()}HyperBoliq\\ImageOutput.jpeg";
 
         static void Main(string[] args)
         {
@@ -33,7 +29,6 @@ namespace Hyperboliq
 
             image = GetImage();
             GetTileFolder();
-
 
             var fileNames = String.Empty;
 
@@ -62,6 +57,14 @@ namespace Hyperboliq
                         Console.WriteLine($"Please add a valid file path to a folder of tile images, this can be dragged and dropped");
 
                         folderInput = Console.ReadLine();
+
+                        //drag and drop - just a quick fix
+                        if (folderInput.StartsWith("\"") && folderInput.EndsWith("\""))
+                        {
+                            folderInput = folderInput.Remove(0, 1);
+                            folderInput = folderInput.Remove(folderInput.Length - 1, 1);
+                        }
+
                         folderInput = File.GetAttributes(folderInput).HasFlag(FileAttributes.Directory) ? folderInput : String.Empty;
                     }
                     catch
@@ -69,14 +72,12 @@ namespace Hyperboliq
                         folderInput = String.Empty;
                     }
                 }
+                Int32 folderCount = Directory.GetFiles(folderInput).Count();
 
-                Int32 count = 0,
-                    folderCount = Directory.GetFiles(folderInput).Count();
+                Console.WriteLine($"Processing ({folderCount} Files)");
 
-                foreach (var filePath in Directory.GetFiles(folderInput))
+                Parallel.ForEach(Directory.GetFiles(folderInput), filePath =>
                 {
-                    count++;
-
                     var fileExtension = Path.GetExtension(filePath);
 
                     if (IsValidImageExtension(fileExtension))
@@ -84,7 +85,7 @@ namespace Hyperboliq
                         _tileImages.Add(Image.FromFile(filePath));
                         _fileNames.Add(Path.GetFileName(filePath));
                     }
-                }
+                });
 
                 var tileImageCount = _tileImages.Count;
                 if (tileImageCount <= 0)
@@ -126,7 +127,7 @@ namespace Hyperboliq
                         imageInput = imageInput.Remove(0, 1);
                         imageInput = imageInput.Remove(imageInput.Length - 1, 1);
                     }
-                    
+
                     image = Image.FromFile(imageInput);
                     _fileNames.Add(Path.GetFileName(imageInput));
 
@@ -183,70 +184,73 @@ namespace Hyperboliq
         private static void CalculateLargeImage(Image image)
         {
             //setting an array to the amount of peices desired
-            Image[] imgArray = new Image[400];
+            var imgPieces = new List<Image>();
+
+            Int32 imageWidth = Convert.ToInt32((double)image.Width / 400),
+                imageHeight = Convert.ToInt32((double)image.Height/ 400);
 
             //looping through height and width to achieve the desired amount of pieces 20x20
-            for (var x = 0; x <= 20; x++)
+            for (var x = 0; x < 20; x++)
             {
-                for (var y = 0; y <= 20; y++)
+                for (var y = 0; y < 20; y++)
                 {
                     //assigning each index for the desired 20x20 image
                     var index = x * 20 + y;
 
-                    if (index >= imgArray.Length)
-                        continue;
-
-                    imgArray[index] = new Bitmap(104, 104);
-                    var graphics = Graphics.FromImage(imgArray[index]);
-                    graphics.DrawImage(image, new Rectangle(0, 0, 104, 104), new Rectangle(x * 104, y * 104, 104, 104), GraphicsUnit.Pixel);
-                    graphics.Dispose();
+                    imgPieces.Add(new Bitmap(imageWidth, imageHeight));
+                    using (var graphics = Graphics.FromImage(imgPieces.Last()))
+                    {
+                        graphics.DrawImage(image, new Rectangle(0, 0, imageWidth, imageHeight), new Rectangle(x * imageWidth, y * imageHeight, imageWidth, imageHeight), GraphicsUnit.Pixel);
+                    }
                 }
             }
-
-            var smlDist = -1;
-            var imgCount = 1;
-            var minVal = double.MaxValue;
-            var valueDict = new Dictionary<String, Object>();
             
-            _tileImages.ForEach(img =>
-            {
-                var arrCount = 1;
-                for (var i = 0; i < imgArray.Length; i++)
-                {
+            var imgCount = 0;
+            var imgList = new List<Image>();
+            var proccessEnd = (double)_tileImages.Count * imgPieces.Count;
+            double smallValue = Double.MaxValue;
+
+            imgPieces.ForEach(img => {
+                Image currentImage = img;
+
+                _tileImages.ForEach(tileImage => {
+                    var proccessPrecentage = Math.Round(proccessEnd / (double)imgCount);
+
                     Console.SetCursorPosition(0, Console.CursorTop);
-                    Console.Write($"Comparing Tile Image : ({imgCount}) with Large Image part({i}) of ({imgArray.Length})");
-                    var calculatedDiff = Calc.CompareCieLAB(imgArray[i], img, _userIlluminant);
-                    valueDict.Add($"{imgCount}_{arrCount}", calculatedDiff);
-                    
-                    if (calculatedDiff < minVal)
+                    Console.Write($"processing tile images... {proccessPrecentage}%");
+
+                    var calculateddiff = Calc.CompareCieLAB(img, tileImage, _userIlluminant);
+                    if (calculateddiff <= smallValue) 
                     {
-                        smlDist = i;
-                        minVal = calculatedDiff;
+                        currentImage = new Bitmap(tileImage, currentImage.Size);
                     }
-                    arrCount++;
-                }
-                imgArray[smlDist] = img;
+                    imgCount++;
+                });
+                imgList.Add(currentImage);
                 imgCount++;
             });
 
-            var bitMap = new Bitmap(image.Width, image.Height, new Bitmap(image).PixelFormat);
-            using (var graphics1 = Graphics.FromImage(bitMap))
+            using (var bitMap = new Bitmap(image.Width, image.Height))
             {
-                var counter = 1;
-                
-                foreach(var img in imgArray )
+                var width = 0;
+                using (var graphics1 = Graphics.FromImage(bitMap))
                 {
-                    graphics1.DrawImage(img, 0, 0);
-
-                    Console.SetCursorPosition(0, Console.CursorTop);
-                    Console.Write($"\nDrawing part({counter}) of {imgArray.Length}");
-
+                    Int32 counter = 1;
+                    imgList.ForEach(img => {
+                        graphics1.DrawImage(img, width, 0, img.Width, img.Height);
+                        width += (Int32)((double)image.Width / 400);
+                    });
                     counter++;
                 }
-            }
-            bitMap.Save(_outImagePath, System.Drawing.Imaging.ImageFormat.Jpeg);
 
-            Console.WriteLine($"File located in : {_outImagePath}");
+                if (!Directory.Exists(_outImageFolderPath))
+                    Directory.CreateDirectory(_outImageFolderPath);
+
+                bitMap.Save(_outImagePath, System.Drawing.Imaging.ImageFormat.Jpeg);
+
+
+                Console.WriteLine($"\nFile located in : {_outImagePath}");
+            }
 
             try
             {

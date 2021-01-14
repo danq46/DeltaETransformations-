@@ -24,36 +24,33 @@ namespace Hyperboliq
         {
             Double R = 0, G = 0, B = 0, total = 0;
 
-            var bitMap = new Bitmap(image);
-
-            Int32 width = bitMap.Width,
-                height = bitMap.Height;
-
-            var bitMapData = bitMap.LockBits(new Rectangle(0, 0, width, height), ImageLockMode.ReadOnly,bitMap.PixelFormat);
-            
-            //stride is the width of a single row of pixels (a scan line), rounded up to a four-byte boundary.
-            var stride = Math.Abs(bitMapData.Stride);
-
-            unsafe
+            using (var bitMap = new Bitmap(image))
             {
-                //first pixel data 
-                byte* pointer = (byte*)bitMapData.Scan0;
+                unsafe 
+                {
+                    var bitMapData = bitMap.LockBits(new Rectangle(0, 0, bitMap.Width, bitMap.Height), ImageLockMode.ReadWrite, bitMap.PixelFormat);
 
-                Parallel.For(0, width, x => {
-                    byte* pointerLine = pointer + x * stride;
-                    
-                    //get RGB data for each pixel
-                    for (var y = 0; y < height; y++)
-                    {
-                        R += pointerLine[2];
-                        G += pointerLine[1];
-                        B += pointerLine[0];
-                        total++;
-                    }
-                    pointerLine += 3;
-                });
+                    Int32 pixelHeight = bitMapData.Height,
+                        //3 bytes per pixel
+                        pixelWidht = bitMapData.Width * 3;
+
+                    //first pixel
+                    byte* pointer = (byte*)bitMapData.Scan0;
+
+                    Parallel.For(0, pixelHeight, x => {
+                        var scanLine = pointer + (x * bitMapData.Stride);
+
+                        for (var i = 0; x < pixelWidht; x = x + 3) 
+                        {
+                            B = scanLine[i];
+                            G = scanLine[i + 1];
+                            R = scanLine[i + 2];
+                            total++;
+                        }
+                    });
+                    bitMap.UnlockBits(bitMapData);
+                }
             }
-            bitMap.UnlockBits(bitMapData);
 
             _avgR = R / total;
             _avgG = G / total;
